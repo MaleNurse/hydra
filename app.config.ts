@@ -1,7 +1,7 @@
 import packageJson from './package.json';
 
-const projectId = "7e403d7f-7747-4daa-a3c9-4acb948f7a60";
 const IS_DEV = process.env.APP_VARIANT === 'development';
+const projectId = 'bdd1d0df-2036-4c29-b421-d9661c1d749c'
 
 module.exports = {
   expo: {
@@ -26,7 +26,7 @@ module.exports = {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: IS_DEV ? 'com.dmilin.hydra-dev' : "com.dmilin.hydra"
+      bundleIdentifier: IS_DEV ? 'com.zacharylm.hydra-dev' : "com.zacharylm.hydra"
     },
     android: {
       adaptiveIcon: {
@@ -43,7 +43,7 @@ module.exports = {
         projectId,
       }
     },
-    owner: "dmilin",
+    owner: "malenurse",
     plugins: [
       "expo-router",
       [
