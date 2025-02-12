@@ -1,18 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useEffect, useState } from "react";
-
-type PostSettingsContextType = {
-  postCompactMode: boolean;
-  togglePostCompactMode: (newValue?: boolean) => void;
-  subredditAtTop: boolean;
-  toggleSubredditAtTop: (newValue?: boolean) => void;
-  showSubredditIcon: boolean;
-  toggleSubredditIcon: (newValue?: boolean) => void;
-  postTitleLength: number;
-  changePostTitleLength: (newValue: number) => void;
-  postTextLength: number;
-  changePostTextLength: (newValue: number) => void;
-};
+import { createContext } from "react";
+import { useMMKVBoolean, useMMKVNumber } from "react-native-mmkv";
 
 const initialValues = {
   postCompactMode: false,
@@ -20,119 +7,63 @@ const initialValues = {
   showSubredditIcon: true,
   postTitleLength: 2,
   postTextLength: 3,
+  blurSpoilers: true,
+  blurNSFW: true,
 };
 
-const initialPostSettingsContext: PostSettingsContextType = {
+const initialPostSettingsContext = {
   ...initialValues,
-  togglePostCompactMode: () => {},
-  toggleSubredditAtTop: () => {},
-  toggleSubredditIcon: () => {},
-  changePostTitleLength: () => {},
-  changePostTextLength: () => {},
+  togglePostCompactMode: (_newValue?: boolean) => {},
+  toggleSubredditAtTop: (_newValue?: boolean) => {},
+  toggleSubredditIcon: (_newValue?: boolean) => {},
+  changePostTitleLength: (_newValue: number) => {},
+  changePostTextLength: (_newValue: number) => {},
+  toggleBlurSpoilers: (_newValue?: boolean) => {},
+  toggleBlurNSFW: (_newValue?: boolean) => {},
 };
-
-type SettingsLoaders = {
-  [Key in keyof typeof initialValues]: {
-    key: Key;
-    setFn: React.Dispatch<React.SetStateAction<(typeof initialValues)[Key]>>;
-  };
-}[keyof typeof initialValues][];
 
 export const PostSettingsContext = createContext(initialPostSettingsContext);
 
 export function PostSettingsProvider({ children }: React.PropsWithChildren) {
-  const [postCompactMode, setPostCompactMode] = useState(
-    initialPostSettingsContext.postCompactMode,
-  );
-  const [subredditAtTop, setSubredditAtTop] = useState(
-    initialPostSettingsContext.subredditAtTop,
-  );
-  const [showSubredditIcon, setShowSubredditIcon] = useState(
-    initialPostSettingsContext.showSubredditIcon,
-  );
-  const [postTitleLength, setPostTitleLength] = useState(
-    initialPostSettingsContext.postTitleLength,
-  );
-  const [postTextLength, setPostTextLength] = useState(
-    initialPostSettingsContext.postTextLength,
-  );
-
-  const togglePostCompactMode = (newValue = !postCompactMode) => {
-    setPostCompactMode((prev) => !prev);
-    AsyncStorage.setItem("postCompactMode", JSON.stringify(newValue));
-  };
-
-  const toggleSubredditAtTop = (newValue = !subredditAtTop) => {
-    setSubredditAtTop((prev) => !prev);
-    AsyncStorage.setItem("subredditAtTop", JSON.stringify(newValue));
-  };
-
-  const toggleSubredditIcon = (newValue = !showSubredditIcon) => {
-    setShowSubredditIcon((prev) => !prev);
-    AsyncStorage.setItem("showSubredditIcon", JSON.stringify(newValue));
-  };
-
-  const changePostTitleLength = (newValue: number) => {
-    setPostTitleLength(newValue);
-    AsyncStorage.setItem("postTitleLength", JSON.stringify(newValue));
-  };
-
-  const changePostTextLength = (newValue: number) => {
-    setPostTextLength(newValue);
-    AsyncStorage.setItem("postTextLength", JSON.stringify(newValue));
-  };
-
-  const loadSavedData = () => {
-    const settingsLoaders: SettingsLoaders = [
-      {
-        key: "postCompactMode",
-        setFn: setPostCompactMode,
-      },
-      {
-        key: "subredditAtTop",
-        setFn: setSubredditAtTop,
-      },
-      {
-        key: "showSubredditIcon",
-        setFn: setShowSubredditIcon,
-      },
-      {
-        key: "postTitleLength",
-        setFn: setPostTitleLength,
-      },
-      {
-        key: "postTextLength",
-        setFn: setPostTextLength,
-      },
-    ];
-    settingsLoaders.forEach(({ key, setFn }) => {
-      AsyncStorage.getItem(key).then((str) => {
-        if (str) {
-          let val = JSON.parse(str);
-          if (typeof initialPostSettingsContext[key] === "number") {
-            val = Number(val);
-          }
-          setFn(JSON.parse(val));
-        }
-      });
-    });
-  };
-
-  useEffect(() => loadSavedData(), []);
+  const [postCompactMode, setPostCompactMode] =
+    useMMKVBoolean("postCompactMode");
+  const [subredditAtTop, setSubredditAtTop] = useMMKVBoolean("subredditAtTop");
+  const [showSubredditIcon, setShowSubredditIcon] =
+    useMMKVBoolean("showSubredditIcon");
+  const [postTitleLength, setPostTitleLength] =
+    useMMKVNumber("postTitleLength");
+  const [postTextLength, setPostTextLength] = useMMKVNumber("postTextLength");
+  const [blurSpoilers, setBlurSpoilers] = useMMKVBoolean("blurSpoilers");
+  const [blurNSFW, setBlurNSFW] = useMMKVBoolean("blurNSFW");
 
   return (
     <PostSettingsContext.Provider
       value={{
-        postCompactMode,
-        togglePostCompactMode,
-        subredditAtTop,
-        toggleSubredditAtTop,
-        showSubredditIcon,
-        toggleSubredditIcon,
-        postTitleLength,
-        changePostTitleLength,
-        postTextLength,
-        changePostTextLength,
+        postCompactMode: postCompactMode ?? initialValues.postCompactMode,
+        togglePostCompactMode: (newValue = !postCompactMode) =>
+          setPostCompactMode(newValue),
+
+        subredditAtTop: subredditAtTop ?? initialValues.subredditAtTop,
+        toggleSubredditAtTop: (newValue = !subredditAtTop) =>
+          setSubredditAtTop(newValue),
+
+        showSubredditIcon: showSubredditIcon ?? initialValues.showSubredditIcon,
+        toggleSubredditIcon: (newValue = !showSubredditIcon) =>
+          setShowSubredditIcon(newValue),
+
+        postTitleLength: postTitleLength ?? initialValues.postTitleLength,
+        changePostTitleLength: (newValue: number) =>
+          setPostTitleLength(newValue),
+
+        postTextLength: postTextLength ?? initialValues.postTextLength,
+        changePostTextLength: (newValue: number) => setPostTextLength(newValue),
+
+        blurSpoilers: blurSpoilers ?? initialValues.blurSpoilers,
+        toggleBlurSpoilers: (newValue = !blurSpoilers) =>
+          setBlurSpoilers(newValue),
+
+        blurNSFW: blurNSFW ?? initialValues.blurNSFW,
+        toggleBlurNSFW: (newValue = !blurNSFW) => setBlurNSFW(newValue),
       }}
     >
       {children}

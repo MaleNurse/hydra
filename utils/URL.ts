@@ -65,20 +65,32 @@ export default class URL {
     return this;
   }
 
-  async getOpenGraphData(): Promise<OpenGraphData> {
-    const res = await fetch(this.url);
-    const html = await res.text();
-    const results: OpenGraphData = {};
-    const parser = new Parser({
-      onopentag(name, attribs) {
-        if (name === "meta" && attribs.property?.startsWith("og:")) {
-          const key = attribs.property.split("og:")[1] as keyof OpenGraphData;
-          results[key] = attribs.content;
-        }
-      },
-    });
-    parser.write(html);
-    parser.end();
-    return results;
+  deleteQueryParam(key: string): URL {
+    const urlParams = this.getURLParams();
+    const urlParamsObject = new URLSearchParams(urlParams);
+    urlParamsObject.delete(key);
+    this.url = this.url.split("?")[0] + "?" + urlParamsObject.toString();
+    return this;
+  }
+
+  async getOpenGraphData(): Promise<OpenGraphData | undefined> {
+    try {
+      const res = await fetch(this.url);
+      const html = await res.text();
+      const results: OpenGraphData = {};
+      const parser = new Parser({
+        onopentag(name, attribs) {
+          if (name === "meta" && attribs.property?.startsWith("og:")) {
+            const key = attribs.property.split("og:")[1] as keyof OpenGraphData;
+            results[key] = attribs.content;
+          }
+        },
+      });
+      parser.write(html);
+      parser.end();
+      return results;
+    } catch (_) {
+      // if we can't get the open graph data, just return undefined
+    }
   }
 }

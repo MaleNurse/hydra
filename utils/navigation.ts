@@ -8,6 +8,7 @@ import { useContext } from "react";
 
 import RedditURL, { PageType } from "./RedditURL";
 import { StackParamsList } from "../app/stack";
+import { MediaViewerContext } from "../contexts/MediaViewerContext";
 import { StackFutureContext } from "../contexts/StackFutureContext";
 
 export function useNavigation() {
@@ -28,21 +29,31 @@ export function useURLNavigation(
   // eslint-disable-next-line react-hooks/rules-of-hooks -- We want to be able to use this in places that can't access the context
   const navigation = overrideNav ?? useNavigation();
   const { clearFuture } = useContext(StackFutureContext);
+  const { displayMedia } = useContext(MediaViewerContext);
 
-  const doNavigationAction = (url: string, func: NavFunctionsWithURL) => {
-    const pageType = new RedditURL(url).getPageType();
+  const doNavigationAction = async (url: string, func: NavFunctionsWithURL) => {
+    const resolvedURL = await new RedditURL(url).resolveURL();
+    const pageType = new RedditURL(resolvedURL).getPageType();
     if (pageType === PageType.HOME) {
-      navigation[func]("Home", { url });
+      navigation[func]("Home", { url: resolvedURL });
     } else if (pageType === PageType.SUBREDDIT) {
-      navigation[func]("PostsPage", { url });
+      navigation[func]("PostsPage", { url: resolvedURL });
     } else if (pageType === PageType.POST_DETAILS) {
-      navigation[func]("PostDetailsPage", { url });
+      navigation[func]("PostDetailsPage", { url: resolvedURL });
+    } else if (pageType === PageType.MULTIREDDIT) {
+      navigation[func]("MultiredditPage", { url: resolvedURL });
     } else if (pageType === PageType.USER) {
-      navigation[func]("UserPage", { url });
+      navigation[func]("UserPage", { url: resolvedURL });
     } else if (pageType === PageType.ACCOUNTS) {
-      navigation[func]("Accounts", { url });
+      navigation[func]("Accounts", { url: resolvedURL });
+    } else if (pageType === PageType.MESSAGES) {
+      navigation[func]("MessagesPage", { url: resolvedURL });
     } else if (pageType === PageType.SETTINGS) {
-      navigation[func]("SettingsPage", { url });
+      navigation[func]("SettingsPage", { url: resolvedURL });
+    } else if (pageType === PageType.IMAGE) {
+      displayMedia(resolvedURL);
+    } else {
+      navigation[func]("ErrorPage", { url: resolvedURL });
     }
     clearFuture();
   };

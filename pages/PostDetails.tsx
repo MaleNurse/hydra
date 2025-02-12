@@ -1,11 +1,11 @@
-import { AntDesign, Feather, FontAwesome, Octicons } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
 import React, {
   useContext,
   useCallback,
   useRef,
   useEffect,
   useState,
-  ReactNode,
+  useDeferredValue,
 } from "react";
 import {
   StyleSheet,
@@ -13,8 +13,8 @@ import {
   Text,
   ActivityIndicator,
   TouchableOpacity,
-  VirtualizedList,
-  Share,
+  ScrollView,
+  RefreshControl,
 } from "react-native";
 
 import {
@@ -22,17 +22,16 @@ import {
   loadMoreComments,
   PostDetail,
   Comment,
-  vote,
-  savePost,
 } from "../api/PostDetail";
-import { VoteOption } from "../api/Posts";
 import { StackPageProps } from "../app/stack";
-import ContentEditor from "../components/Modals/ContentEditor";
+import SortAndContext, {
+  ContextTypes,
+  SortTypes,
+} from "../components/Navbar/SortAndContext";
+import PostDetailsComponent from "../components/RedditDataRepresentations/Post/PostDetailsComponent";
 import Comments from "../components/RedditDataRepresentations/Post/PostParts/Comments";
-import PostMedia from "../components/RedditDataRepresentations/Post/PostParts/PostMedia";
-import SubredditIcon from "../components/RedditDataRepresentations/Post/PostParts/SubredditIcon";
-import Scroller from "../components/UI/Scroller";
-import { ModalContext } from "../contexts/ModalContext";
+import { AccountContext } from "../contexts/AccountContext";
+import { ScrollerContext, ScrollerProvider } from "../contexts/ScrollerContext";
 import { ThemeContext, t } from "../contexts/SettingsContexts/ThemeContext";
 import RedditURL from "../utils/RedditURL";
 import { useURLNavigation } from "../utils/navigation";
@@ -43,20 +42,25 @@ export type LoadMoreCommentsFunc = (
   childStartIndex: number,
 ) => Promise<void>;
 
-export default function PostDetails({
-  route,
-}: StackPageProps<"PostDetailsPage">) {
+type PostDetailsProps = StackPageProps<"PostDetailsPage">;
+
+function PostDetails({ route }: PostDetailsProps) {
   const url = route.params.url;
 
-  const { theme } = useContext(ThemeContext);
-  const { pushURL } = useURLNavigation();
-  const { setModal } = useContext(ModalContext);
+  const navigation = useURLNavigation();
 
-  const scrollView = useRef<VirtualizedList<ReactNode>>(null);
+  const { theme } = useContext(ThemeContext);
+  const { scrollDisabled } = useContext(ScrollerContext);
+  const { currentUser } = useContext(AccountContext);
+
+  const topOfScroll = useRef<View>(null);
+  const scrollView = useRef<ScrollView>(null);
   const commentsView = React.useRef<View>(null);
 
   const [postDetail, setPostDetail] = useState<PostDetail>();
-  const [mediaCollapsed, setMediaCollapsed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const deferredPostDetail = useDeferredValue(postDetail);
 
   const asyncMeasure = (
     ref: any,
@@ -72,15 +76,12 @@ export default function PostDetails({
   const scrollChange = useCallback(
     async (changeY: number) => {
       if (!scrollView.current) return;
-      const scrollRef = scrollView.current.getScrollRef();
-      const scrollY = (await asyncMeasure(scrollRef))[5];
-      if (changeY < scrollY) {
-        const innerView = (scrollView.current as any)
-          .getScrollRef()
-          ?.getInnerViewRef();
-        const viewY = (await asyncMeasure(innerView))[5];
-        (scrollView.current as any)?.scrollToOffset({
-          offset: changeY - viewY,
+      const scrollRef = scrollView.current;
+      const scrollWindowTop = (await asyncMeasure(scrollRef))[5];
+      if (changeY < scrollWindowTop) {
+        const scrollDepth = (await asyncMeasure(topOfScroll.current))[5];
+        scrollView.current.scrollTo({
+          y: scrollWindowTop - scrollDepth + (changeY - scrollWindowTop),
           animated: true,
         });
       }
@@ -89,8 +90,42 @@ export default function PostDetails({
   );
 
   const loadPostDetails = async () => {
+    setRefreshing(true);
     const postDetail = await getPostsDetail(url);
     setPostDetail(postDetail);
+    setRefreshing(false);
+
+    const contextOptions: ContextTypes[] = [
+      ...(currentUser?.userName === postDetail.author && postDetail.text
+        ? ["Edit" as ContextTypes]
+        : []),
+      ...(currentUser?.userName === postDetail.author
+        ? ["Delete" as ContextTypes]
+        : []),
+      "Share",
+    ];
+    const contextSort: SortTypes[] = [
+      "Best",
+      "New",
+      "Top",
+      "Controversial",
+      "Old",
+      "Q&A",
+    ];
+    navigation.setOptions({
+      title: new RedditURL(route.params.url).getPageName(),
+      headerRight: () => {
+        return (
+          <SortAndContext
+            route={route}
+            navigation={navigation}
+            sortOptions={contextSort}
+            contextOptions={contextOptions}
+            pageData={postDetail}
+          />
+        );
+      },
+    });
   };
 
   const getCommentFromPath = (
@@ -156,37 +191,23 @@ export default function PostDetails({
     });
   };
 
-  const voteOnPost = async (voteOption: VoteOption) => {
-    if (postDetail) {
-      const result = await vote(postDetail, voteOption);
-      setPostDetail({
-        ...postDetail,
-        upvotes: postDetail.upvotes - postDetail.userVote + result,
-        userVote: result,
-      });
-    }
-  };
-
   const scrollToNextComment = async () => {
     if (!scrollView.current || !commentsView.current) return;
-    const scrollRef = scrollView.current.getScrollRef();
-    const innerViewRef = (scrollView.current as any)
-      .getScrollRef()
-      ?.getInnerViewRef();
+    const scrollRef = scrollView.current;
     const scrollY = (await asyncMeasure(scrollRef, "measureInWindow"))[1];
     const currentScrollHeight = (
-      await asyncMeasure(innerViewRef, "measureInWindow")
+      await asyncMeasure(topOfScroll.current, "measureInWindow")
     )[1];
     const childComments = (commentsView.current as any).__internalInstanceHandle
-      .child.child.child.child.child.child.memoizedProps[0];
+      .child.child.child.child.memoizedProps[0];
     for (const commentView of childComments) {
       const commentRef = commentView.props.commentPropRef.current;
       const commentMeasures = await asyncMeasure(commentRef, "measureInWindow");
       const commentY = commentMeasures[1];
       const delta = commentY - currentScrollHeight;
       if (commentY > scrollY) {
-        (scrollView.current as any)?.scrollToOffset({
-          offset: delta + 1 /* scroll a bit over to fix bug */,
+        scrollView.current.scrollTo({
+          y: delta + 1 /* scroll a bit over to fix bug */,
           animated: true,
         });
         break;
@@ -205,204 +226,52 @@ export default function PostDetails({
       })}
     >
       {postDetail ? (
-        <Scroller
-          scrollViewRef={scrollView}
-          refresh={async () => await loadPostDetails()}
+        <ScrollView
+          ref={scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadPostDetails()}
+            />
+          }
+          scrollEnabled={!scrollDisabled}
         >
-          {postDetail && (
-            <>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setMediaCollapsed(!mediaCollapsed)}
-              >
-                <View style={styles.postDetailsContainer}>
-                  <Text
-                    style={t(styles.title, {
-                      color: theme.text,
-                    })}
-                  >
-                    {postDetail.title}
-                  </Text>
-
-                  {!mediaCollapsed && <PostMedia post={postDetail} />}
-                  <View style={styles.metadataContainer}>
-                    <View style={styles.metadataRow}>
-                      {postDetail.isStickied && (
-                        <AntDesign
-                          name="pushpin"
-                          style={t(styles.stickiedIcon, {
-                            color: theme.moderator,
-                          })}
-                        />
-                      )}
-                      <TouchableOpacity
-                        style={styles.subredditContainer}
-                        activeOpacity={0.5}
-                        onPress={() => pushURL(`/r/${postDetail.subreddit}`)}
-                      >
-                        <SubredditIcon post={postDetail} />
-                        <Text
-                          style={t(styles.boldedSmallText, {
-                            color: theme.subtleText,
-                          })}
-                        >
-                          {`r/${postDetail.subreddit}`}
-                        </Text>
-                      </TouchableOpacity>
-                      <Text
-                        style={t(styles.smallText, {
-                          color: theme.subtleText,
-                        })}
-                      >
-                        {" by "}
-                      </Text>
-                      <TouchableOpacity
-                        activeOpacity={0.5}
-                        onPress={() => pushURL(`/u/${postDetail.author}`)}
-                      >
-                        <Text
-                          style={t(styles.boldedSmallText, {
-                            color: postDetail.isModerator
-                              ? theme.moderator
-                              : theme.subtleText,
-                          })}
-                        >
-                          {`u/${postDetail.author}`}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={[styles.metadataRow, { marginTop: 5 }]}>
-                      <AntDesign
-                        name="arrowup"
-                        size={15}
-                        color={theme.subtleText}
-                      />
-                      <Text
-                        style={t(styles.smallText, {
-                          color: theme.subtleText,
-                        })}
-                      >
-                        {postDetail.upvotes}
-                      </Text>
-                      <Text
-                        style={t(styles.smallText, {
-                          color: theme.subtleText,
-                        })}
-                      >
-                        {"  •  "}
-                        {postDetail.timeSince}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <View
-                style={t(styles.buttonsBarContainer, {
-                  borderTopColor: theme.divider,
+          <View ref={topOfScroll} />
+          <PostDetailsComponent
+            key={postDetail.id}
+            postDetail={postDetail}
+            loadPostDetails={loadPostDetails}
+            setPostDetail={setPostDetail}
+          />
+          {deferredPostDetail && deferredPostDetail.comments.length > 0 ? (
+            <Comments
+              key={`${deferredPostDetail.id}-comments`}
+              ref={commentsView}
+              loadMoreComments={loadMoreCommentsFunc}
+              postDetail={deferredPostDetail}
+              scrollChange={scrollChange}
+              changeComment={(comment: Comment) => changeComment(comment)}
+              deleteComment={(comment: Comment) => deleteComment(comment)}
+            />
+          ) : postDetail !== deferredPostDetail ? (
+            <View
+              key="loading-comments"
+              style={styles.loadingCommentsContainer}
+            >
+              <ActivityIndicator size="small" />
+            </View>
+          ) : (
+            <View key="no-comments" style={styles.noCommentsContainer}>
+              <Text
+                style={t(styles.noCommentsText, {
+                  color: theme.text,
                 })}
               >
-                <TouchableOpacity
-                  style={t(styles.buttonsContainer, {
-                    backgroundColor:
-                      postDetail.userVote === VoteOption.UpVote
-                        ? theme.upvote
-                        : undefined,
-                  })}
-                  onPress={() => voteOnPost(VoteOption.UpVote)}
-                >
-                  <AntDesign
-                    name="arrowup"
-                    size={28}
-                    color={
-                      postDetail.userVote === VoteOption.UpVote
-                        ? theme.text
-                        : theme.iconPrimary
-                    }
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={t(styles.buttonsContainer, {
-                    backgroundColor:
-                      postDetail.userVote === VoteOption.DownVote
-                        ? theme.downvote
-                        : undefined,
-                  })}
-                  onPress={() => voteOnPost(VoteOption.DownVote)}
-                >
-                  <AntDesign
-                    name="arrowdown"
-                    size={28}
-                    color={
-                      postDetail.userVote === VoteOption.DownVote
-                        ? theme.text
-                        : theme.iconPrimary
-                    }
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={t(styles.buttonsContainer, {
-                    backgroundColor: undefined,
-                  })}
-                  onPress={async () => {
-                    await savePost(postDetail, !postDetail.saved);
-                    setPostDetail({
-                      ...postDetail,
-                      saved: !postDetail.saved,
-                    });
-                  }}
-                >
-                  <FontAwesome
-                    name={postDetail.saved ? "bookmark" : "bookmark-o"}
-                    size={28}
-                    color={theme.iconPrimary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.buttonsContainer}
-                  onPress={() =>
-                    setModal(
-                      <ContentEditor
-                        mode="makeComment"
-                        parent={postDetail}
-                        contentSent={async () => await loadPostDetails()}
-                      />,
-                    )
-                  }
-                >
-                  <Octicons name="reply" size={28} color={theme.iconPrimary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.buttonsContainer}
-                  onPress={() => {
-                    Share.share({ url: new RedditURL(url).toString() });
-                  }}
-                >
-                  <Feather name="share" size={28} color={theme.iconPrimary} />
-                </TouchableOpacity>
-              </View>
-              {postDetail.comments.length > 0 ? (
-                <Comments
-                  ref={commentsView}
-                  loadMoreComments={loadMoreCommentsFunc}
-                  postDetail={postDetail}
-                  scrollChange={scrollChange}
-                  changeComment={(comment: Comment) => changeComment(comment)}
-                  deleteComment={(comment: Comment) => deleteComment(comment)}
-                />
-              ) : (
-                <View style={styles.noCommentsContainer}>
-                  <Text
-                    style={t(styles.noCommentsText, {
-                      color: theme.text,
-                    })}
-                  >
-                    No comments
-                  </Text>
-                </View>
-              )}
-            </>
+                No comments
+              </Text>
+            </View>
           )}
-        </Scroller>
+        </ScrollView>
       ) : (
         <ActivityIndicator size="small" />
       )}
@@ -418,6 +287,14 @@ export default function PostDetails({
     </View>
   );
 }
+
+export default (props: PostDetailsProps) => {
+  return (
+    <ScrollerProvider>
+      <PostDetails {...props} />
+    </ScrollerProvider>
+  );
+};
 
 const styles = StyleSheet.create({
   postDetailsOuterContainer: {
@@ -467,6 +344,16 @@ const styles = StyleSheet.create({
   buttonsContainer: {
     padding: 3,
     borderRadius: 5,
+  },
+  showContextContainer: {
+    borderTopWidth: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  loadingCommentsContainer: {
+    marginVertical: 25,
+    justifyContent: "center",
+    alignItems: "center",
   },
   noCommentsContainer: {
     marginVertical: 25,

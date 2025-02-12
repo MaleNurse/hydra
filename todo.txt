@@ -1,23 +1,49 @@
+### Unlikely
+- 🚀 Make top/bottom bars fade or disappear when scrolling
 
-### HARD
-- Respond to inbox messages
-- Get polls working
-- Make subreddit title a search button
-- Image upload when making posts/comments
-- Make OTA updating smoother
-- Accessibility support
-- Make multireddits work
-- Mark posts as seen/read
+- 🚀 Full multiple pane iPad support
+
+
+### Hard
+- 🚀 Android support
+
+- 🚀 Get polls working
+
+- 🚀 Make subreddit title a search button
+
+- 🚀 Message drafts
+
+- 🚀 Accessibility support
+
+- 🚀 Mark posts as seen/read
+- 🚀 Endpoint caching, future navigation stack state caching, remember subreddit sort (https://www.reddit.com/r/HydraFeatureRequests/comments/1h0rddj/couple_of_requests/)
+- 🚀 Make posts grayed out when you’ve read them 
+
+- 🚀 User flairs
+
+- 🚀 Fully customizable themeing with shareability
+
+- 🚀 Notifications
+
+- 🚀 Fancy bookmarks with folders and categories
+
+- 🚀 Keyword filters
+
+- 🚀 Maintain session cookies so log in isn't required every time the app is opened. Will prevent 2FA from being required when switching accounts.
 
 
 ### Medium
-- Add option to blur NSFW
-- Collapse automod comments
+- 🚀 Collapse automod comments
 
+- 🚀 Load favicons when sites don't support the Open Graph Protocol
+
+- 🚀 Save posts and comments as image (https://www.reddit.com/r/HydraFeatureRequests/comments/1ifk8dx/save_as_image/)
+
+- 🚀 Automatic theme switching (https://www.reddit.com/r/HydraFeatureRequests/comments/1ig308c/automatic_theme/)
 
 ### Easy
-- Fix accounts with special characters
-- Add upvote/downvote highlight bar on the side (https://www.reddit.com/r/HydraFeatureRequests/comments/1g9mnjx/comment/lwtnmiv/?context=3)
-- Change .tsx files in /api and /utils to .ts
-- Try removing react-native-gesture-handler. It doesn't seem to be used anywhere.
-- Update to Expo 52 with new architecture
+- 🚀 Hide subreddit name when on a specific subreddit page
+
+- 🚀 Disable minimizing post by tapping (@Em)
+
+- 🐛 Editing a comment on the user page then clicking the link causes a crash

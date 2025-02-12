@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Sentry from "@sentry/react-native";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useEffect, useState } from "react";
 
@@ -8,8 +8,11 @@ import {
   login,
   logout,
   Needs2FA,
+  RateLimited,
 } from "../api/Authentication";
 import { User, getUser } from "../api/User";
+import KeyStore from "../utils/KeyStore";
+import RedditCookies from "../utils/RedditCookies";
 
 export type Account = {
   username: string;
@@ -48,17 +51,25 @@ export function AccountProvider({ children }: React.PropsWithChildren) {
     useState<AccountContextType["currentUser"]>(null);
   const [accounts, setAccounts] = useState<AccountContextType["accounts"]>([]);
 
-  const logInContext = async (account: Account): Promise<void> => {
+  const logInContext = async (account: Account, attempt = 1): Promise<void> => {
     try {
       const currentUser = await getCurrentUser();
       if (currentUser?.data?.name !== account.username) {
         await login(account);
       }
       const user = await getUser("/user/me");
-      await AsyncStorage.setItem("currentUser", account.username);
+      KeyStore.set("currentUser", account.username);
       setCurrentAcc(account);
       setCurrentUser(user);
+      Sentry.setUser({ username: user.userName });
     } catch (e) {
+      if (e instanceof RateLimited && attempt === 1) {
+        // This error seems to happen when the session cookies are stale, but
+        // I'm not sure why that's the case. Clearing the cookies and trying
+        // again seems to fix it.
+        RedditCookies.clearSessionCookies();
+        return logInContext(account, attempt + 1);
+      }
       if (!(e instanceof Needs2FA) && !(e instanceof IncorrectCredentials)) {
         alert("Unexpected error logging in:" + e);
       }
@@ -68,9 +79,10 @@ export function AccountProvider({ children }: React.PropsWithChildren) {
 
   const logOutContext = async () => {
     await logout();
-    await AsyncStorage.removeItem("currentUser");
+    KeyStore.delete("currentUser");
     setCurrentAcc(null);
     setCurrentUser(null);
+    Sentry.setUser(null);
   };
 
   const addUser = async (account: Account, twoFACode: string) => {
@@ -99,10 +111,7 @@ export function AccountProvider({ children }: React.PropsWithChildren) {
   };
 
   const saveAccounts = async (accs: Account[]) => {
-    await AsyncStorage.setItem(
-      "usernames",
-      JSON.stringify(accs.map((acc) => acc.username)),
-    );
+    KeyStore.set("usernames", JSON.stringify(accs.map((acc) => acc.username)));
     await Promise.all(
       accs.map(async (acc) =>
         SecureStore.setItemAsync(`password-${acc.username}`, acc.password),
@@ -111,7 +120,7 @@ export function AccountProvider({ children }: React.PropsWithChildren) {
   };
 
   const loadSavedData = async () => {
-    const usernamesJSON = await AsyncStorage.getItem("usernames");
+    const usernamesJSON = KeyStore.getString("usernames");
     const accs: AccountContextType["accounts"] = [];
     if (usernamesJSON) {
       const usernames: string[] = JSON.parse(usernamesJSON);
@@ -124,7 +133,7 @@ export function AccountProvider({ children }: React.PropsWithChildren) {
           }),
         ),
       );
-      const currentUsername = await AsyncStorage.getItem("currentUser");
+      const currentUsername = KeyStore.getString("currentUser");
       const currentAccount = accs.find(
         (acc) => acc.username === currentUsername,
       );

@@ -1,7 +1,10 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { StackParamsList } from "./index";
-import SortAndContext from "../../components/RedditDataRepresentations/Navbar/SortAndContext";
+import {
+  ContextTypes,
+  SortTypes,
+} from "../../components/Navbar/SortAndContext";
 import PostDetails from "../../pages/PostDetails";
 import RedditURL from "../../utils/RedditURL";
 
@@ -11,6 +14,17 @@ type PostDetailsScreenProps = {
   >;
 };
 
+export const PostDetailsScreenContextOptions: ContextTypes[] = ["Share"];
+
+export const PostDetailsScreenSortOptions: SortTypes[] = [
+  "Best",
+  "New",
+  "Top",
+  "Controversial",
+  "Old",
+  "Q&A",
+];
+
 export default function PostDetailsScreen({
   StackNavigator,
 }: PostDetailsScreenProps) {
@@ -18,25 +32,8 @@ export default function PostDetailsScreen({
     <StackNavigator.Screen<"PostDetailsPage">
       name="PostDetailsPage"
       component={PostDetails}
-      options={({ route, navigation }) => ({
-        title: new RedditURL(route.params.url).getSubreddit() ?? "Details",
-        headerRight: () => {
-          return (
-            <SortAndContext
-              route={route}
-              navigation={navigation}
-              sortOptions={[
-                "Best",
-                "New",
-                "Top",
-                "Controversial",
-                "Old",
-                "Q&A",
-              ]}
-              contextOptions={["Share"]}
-            />
-          );
-        },
+      options={({ route }) => ({
+        title: new RedditURL(route.params.url).getPageName(),
       })}
     />
   );

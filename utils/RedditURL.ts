@@ -4,12 +4,17 @@ export enum PageType {
   HOME,
   POST_DETAILS,
   SUBREDDIT,
+  MULTIREDDIT,
   USER,
   SEARCH,
-  MESSAGE,
+  INBOX,
+
+  MESSAGES,
 
   ACCOUNTS,
   SETTINGS,
+
+  IMAGE,
 
   UNKNOWN,
 }
@@ -42,7 +47,8 @@ export default class RedditURL extends URL {
       !this.url.startsWith("hydra://") &&
       !this.url.startsWith("https://www.reddit.com") &&
       !this.url.startsWith("https://i.redd.it") &&
-      !this.url.startsWith("https://v.redd.it")
+      !this.url.startsWith("https://v.redd.it") &&
+      !this.url.startsWith("https://redd.it")
     ) {
       throw new Error("Not a reddit URL");
     }
@@ -78,6 +84,10 @@ export default class RedditURL extends URL {
       this.url = `https://www.reddit.com/r/${subreddit}/${sort.toLowerCase()}/?${urlParams}`;
     } else if (pageType === PageType.POST_DETAILS) {
       this.changeQueryParam("sort", sort.toLowerCase());
+    } else if (pageType === PageType.MULTIREDDIT) {
+      const pathParts = this.getRelativePath().split("/");
+      pathParts[5] = sort.toLowerCase();
+      this.url = `https://www.reddit.com${pathParts.join("/")}?${urlParams}`;
     } else if (pageType === PageType.USER) {
       this.changeQueryParam("sort", sort.toLowerCase());
     }
@@ -115,8 +125,12 @@ export default class RedditURL extends URL {
       return PageType.POST_DETAILS;
     } else if (relativePath.startsWith("/r/")) {
       return PageType.SUBREDDIT;
-    } else if (relativePath.startsWith("/message/")) {
-      return PageType.MESSAGE;
+    } else if (relativePath.startsWith("/message/inbox")) {
+      return PageType.INBOX;
+    } else if (relativePath.startsWith("/message/messages")) {
+      return PageType.MESSAGES;
+    } else if (relativePath.match(/\/(user|u)\/.*\/m\/.*/)) {
+      return PageType.MULTIREDDIT;
     } else if (
       relativePath.startsWith("/u/") ||
       relativePath.startsWith("/user/")
@@ -124,6 +138,8 @@ export default class RedditURL extends URL {
       return PageType.USER;
     } else if (relativePath.startsWith("/search")) {
       return PageType.SEARCH;
+    } else if (this.url.startsWith("https://i.redd.it")) {
+      return PageType.IMAGE;
     } else {
       return PageType.UNKNOWN;
     }
@@ -155,5 +171,24 @@ export default class RedditURL extends URL {
       name = "Error";
     }
     return name;
+  }
+
+  /**
+   * Properly formats shortened URLs and forwarded URLs
+   */
+  async resolveURL(): Promise<string> {
+    if (this.getRelativePath().startsWith("/u/")) {
+      this.url = this.url.replace("/u/", "/user/");
+      return this.url;
+    }
+    if (this.getPageType() !== PageType.UNKNOWN) {
+      return this.url;
+    }
+    const response = await fetch(this.url, {
+      method: "HEAD",
+      redirect: "follow",
+    });
+    const finalURL = response.url;
+    return new RedditURL(finalURL).url;
   }
 }

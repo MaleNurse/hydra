@@ -1,5 +1,6 @@
 import { AntDesign, Entypo, FontAwesome5 } from "@expo/vector-icons";
-import React, { useContext, useEffect, useState } from "react";
+import { BlurView } from "expo-blur";
+import React, { useContext, useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -14,11 +15,12 @@ import VideoPlayer from "./PostMediaParts/VideoPlayer";
 import { PostDetail } from "../../../../api/PostDetail";
 import { Post } from "../../../../api/Posts";
 import { DataModeContext } from "../../../../contexts/SettingsContexts/DataModeContext";
+import { PostSettingsContext } from "../../../../contexts/SettingsContexts/PostSettingsContext";
 import {
   ThemeContext,
   t,
 } from "../../../../contexts/SettingsContexts/ThemeContext";
-import URL, { OpenGraphData } from "../../../../utils/URL";
+import URL from "../../../../utils/URL";
 import useSaveImage from "../../../../utils/useSaveImage";
 
 type CompactPostMediaProps = {
@@ -32,21 +34,15 @@ export default function CompactPostMedia({ post }: CompactPostMediaProps) {
   const { theme } = useContext(ThemeContext);
   const { currentDataMode } = useContext(DataModeContext);
 
+  const { blurNSFW, blurSpoilers } = useContext(PostSettingsContext);
+  const isBlurable =
+    (blurNSFW && post.isNSFW) || (blurSpoilers && post.isSpoiler);
+  const [blur, setBlur] = useState(isBlurable);
+
   const saveImage = useSaveImage();
 
   const [mediaOpen, setMediaOpen] = useState(false);
   const [imageIndex, setImageIndex] = useState(0);
-  const [openGraphData, setOpenGraphData] = useState<OpenGraphData>();
-
-  const fetchOpenGraphData = async () => {
-    if (!post.externalLink) return;
-    const data = await new URL(post.externalLink).getOpenGraphData();
-    setOpenGraphData(data);
-  };
-
-  useEffect(() => {
-    fetchOpenGraphData();
-  }, []);
 
   let isGif = false;
   if (post.images.length > 0) {
@@ -130,9 +126,9 @@ export default function CompactPostMedia({ post }: CompactPostMediaProps) {
               color={theme.subtleText}
             />
           </View>
-          {openGraphData && currentDataMode !== "lowData" && (
+          {post.openGraphData && currentDataMode !== "lowData" && (
             <Image
-              source={{ uri: openGraphData.image }}
+              source={{ uri: post.openGraphData.image }}
               resizeMode="cover"
               style={styles.image}
             />
@@ -142,6 +138,30 @@ export default function CompactPostMedia({ post }: CompactPostMediaProps) {
         <View style={styles.bigIconContainer}>
           <Entypo name="text" style={styles.bigIcon} color={theme.subtleText} />
         </View>
+      )}
+      {isBlurable && blur && (
+        <TouchableOpacity
+          style={styles.blurContainer}
+          onPress={() => setBlur(false)}
+          activeOpacity={1}
+        >
+          <BlurView intensity={80} style={styles.blur} />
+          <View style={styles.blurIconContainer}>
+            <View
+              style={t(styles.blurIconBox, {
+                backgroundColor: theme.background,
+              })}
+            >
+              <Text
+                style={t(styles.blurText, {
+                  color: theme.subtleText,
+                })}
+              >
+                {post.isNSFW ? "NSFW" : post.isSpoiler ? "Spoiler" : ""}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -213,5 +233,36 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     height: MEDIA_SQUARE_SIZE,
+  },
+  blurContainer: {
+    position: "absolute",
+    top: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 2,
+  },
+  blur: {
+    width: "100%",
+    height: "100%",
+  },
+  blurIconContainer: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blurIconBox: {
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    opacity: 0.5,
+    borderRadius: 10,
+    backgroundColor: "pink",
+    alignItems: "center",
+  },
+  blurText: {
+    fontSize: 10,
   },
 });

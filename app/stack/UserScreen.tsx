@@ -1,8 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { StackParamsList } from "./index";
-import SortAndContext from "../../components/RedditDataRepresentations/Navbar/SortAndContext";
-import TextButton from "../../components/RedditDataRepresentations/Navbar/TextButton";
+import TextButton from "../../components/Navbar/TextButton";
 import UserPage from "../../pages/UserPage";
 import RedditURL from "../../utils/RedditURL";
 
@@ -31,23 +30,7 @@ export default function UserScreen({ StackNavigator }: UserScreenProps) {
             />
           );
         },
-        title: route.params.url.split("/")[4] ?? "User",
-        headerRight: () => {
-          const url = route.params.url;
-          const section = new RedditURL(url).getRelativePath().split("/")[3];
-          return (
-            <SortAndContext
-              route={route}
-              navigation={navigation}
-              sortOptions={
-                section === "submitted" || section === "comments"
-                  ? ["New", "Hot", "Top"]
-                  : undefined
-              }
-              contextOptions={["Share"]}
-            />
-          );
-        },
+        title: new RedditURL(route.params.url).getPageName(),
       })}
     />
   );

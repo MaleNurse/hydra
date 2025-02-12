@@ -3,7 +3,6 @@ import React, {
   useContext,
   useState,
   useMemo,
-  Suspense,
   forwardRef,
   ForwardedRef,
   useRef,
@@ -29,6 +28,7 @@ import {
 import { VoteOption } from "../../../../api/Posts";
 import { AccountContext } from "../../../../contexts/AccountContext";
 import { ModalContext } from "../../../../contexts/ModalContext";
+import { CommentSettingsContext } from "../../../../contexts/SettingsContexts/CommentSettingsContext";
 import {
   ThemeContext,
   t,
@@ -38,7 +38,8 @@ import RedditURL from "../../../../utils/RedditURL";
 import { useURLNavigation } from "../../../../utils/navigation";
 import useContextMenu from "../../../../utils/useContextMenu";
 import RenderHtml from "../../../HTML/RenderHTML";
-import ContentEditor from "../../../Modals/ContentEditor";
+import EditComment from "../../../Modals/EditComment";
+import NewComment from "../../../Modals/NewComment";
 import Slideable from "../../../UI/Slideable";
 
 interface CommentProps {
@@ -67,6 +68,7 @@ export function CommentComponent({
   commentPropRef,
 }: CommentProps) {
   const { theme } = useContext(ThemeContext);
+  const { voteIndicator } = useContext(CommentSettingsContext);
   const { pushURL } = useURLNavigation();
   const { setModal } = useContext(ModalContext);
   const { currentUser } = useContext(AccountContext);
@@ -95,13 +97,14 @@ export function CommentComponent({
 
   const replyToComment = () => {
     setModal(
-      <ContentEditor
-        mode="makeComment"
+      <NewComment
         parent={comment}
-        contentSent={async () => {
-          const reloadedComment = await reloadComment(comment);
-          changeComment?.(reloadedComment);
-        }}
+        contentSent={() =>
+          setTimeout(async () => {
+            const reloadedComment = await reloadComment(comment);
+            changeComment?.(reloadedComment);
+          }, 5_000)
+        }
       />,
     );
   };
@@ -109,8 +112,7 @@ export function CommentComponent({
   const editComment = () => {
     if (comment.type !== "comment") return;
     setModal(
-      <ContentEditor
-        mode="editComment"
+      <EditComment
         edit={comment}
         contentSent={async () => {
           const reloadedComment = await reloadComment(comment);
@@ -207,10 +209,10 @@ export function CommentComponent({
                     pushURL(comment.link);
                   }
                 } else {
-                  commentRef.current?.measure(
-                    (_fx, _fy, _width, _height, _px, py) => {
+                  commentRef.current?.measureInWindow(
+                    (_x, y, _width_, _height) => {
                       if (!collapsed && scrollChange) {
-                        scrollChange(py);
+                        scrollChange(y);
                       }
                     },
                   );
@@ -238,6 +240,14 @@ export function CommentComponent({
                       theme.postColorTint[
                         (comment.depth - 1) % theme.postColorTint.length
                       ],
+                    borderRightColor:
+                      comment.userVote === VoteOption.UpVote
+                        ? theme.upvote
+                        : theme.downvote,
+                    borderRightWidth:
+                      voteIndicator && comment.userVote !== VoteOption.NoVote
+                        ? 1
+                        : 0,
                   },
                 )}
               >
@@ -255,7 +265,7 @@ export function CommentComponent({
                     />
                   )}
                   <TouchableOpacity
-                    onPress={() => pushURL(`/u/${comment.author}`)}
+                    onPress={() => pushURL(`/user/${comment.author}`)}
                   >
                     <Text
                       style={t(styles.author, {
@@ -319,7 +329,9 @@ export function CommentComponent({
                 ) : null}
                 {displayInList && (
                   <TouchableOpacity
-                    style={t(styles.sourceContainer, {})}
+                    style={t(styles.sourceContainer, {
+                      borderColor: theme.tint,
+                    })}
                     activeOpacity={0.8}
                     onPress={() => {
                       pushURL(comment.postLink);
@@ -443,23 +455,15 @@ const Comments = forwardRef(
         })}
         ref={ref}
       >
-        <Suspense
-          fallback={
-            <View>
-              <Text>Loading</Text>
-            </View>
-          }
-        >
-          <CommentComponent
-            key={postDetail.id}
-            loadMoreComments={loadMoreComments}
-            comment={postDetail}
-            index={0}
-            scrollChange={scrollChange}
-            changeComment={changeComment}
-            deleteComment={deleteComment}
-          />
-        </Suspense>
+        <CommentComponent
+          key={postDetail.id}
+          loadMoreComments={loadMoreComments}
+          comment={postDetail}
+          index={0}
+          scrollChange={scrollChange}
+          changeComment={changeComment}
+          deleteComment={deleteComment}
+        />
       </View>
     );
   },
@@ -510,10 +514,11 @@ const styles = StyleSheet.create({
     marginVertical: -10,
   },
   sourceContainer: {
+    borderWidth: 3,
     marginTop: 15,
     marginBottom: 5,
     padding: 10,
-    borderRadius: 5,
+    borderRadius: 10,
   },
   sourcePostTitle: {
     marginBottom: 10,

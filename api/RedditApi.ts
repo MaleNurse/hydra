@@ -4,10 +4,13 @@ import { UserAuth } from "./Authentication";
 import RedditCookies from "../utils/RedditCookies";
 import RedditURL from "../utils/RedditURL";
 
+export type RedditDataObject = { id: string; type: string };
+
 type ApiOptions = {
   depaginate?: boolean;
   requireAuth?: boolean;
   body?: { [key: string]: any };
+  dontJsonifyResponse?: boolean;
 };
 
 export async function api(
@@ -43,6 +46,10 @@ export async function api(
    * so we set an expiration date of 10,000 days in the future.
    */
   await RedditCookies.persistSessionCookies();
+
+  if (apiOptions.dontJsonifyResponse) {
+    return await res.text();
+  }
 
   const json = await res.json();
   if (apiOptions.depaginate) {

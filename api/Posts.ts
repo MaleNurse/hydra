@@ -5,6 +5,7 @@ import { api } from "./RedditApi";
 import Redgifs from "../utils/RedGifs";
 import RedditURL from "../utils/RedditURL";
 import Time from "../utils/Time";
+import URL, { OpenGraphData } from "../utils/URL";
 
 export type Poll = {
   voteCount: number;
@@ -28,16 +29,20 @@ export type Post = {
   subredditIcon: string;
   isModerator: boolean;
   isStickied: boolean;
+  isNSFW: boolean;
+  isSpoiler: boolean;
   text: string;
   html: string;
   commentCount: number;
   link: string;
   images: string[];
   imageThumbnail: string;
+  imageAspectRatio: number;
   video: string | undefined;
   redditAudioSource?: string;
   poll: Poll | undefined;
   externalLink: string | undefined;
+  openGraphData: OpenGraphData | undefined;
   createdAt: number;
   timeSince: string;
   after: string;
@@ -64,12 +69,32 @@ export async function formatPostData(child: any): Promise<Post> {
       }),
       {},
     ) ?? {};
+
+  const galleryThumbnails = Object.values(child.data.media_metadata ?? {})
+    .sort((a: any, b: any) => galleryIndexes[a.id] - galleryIndexes[b.id])
+    .map((data: any) => data.p?.[0]?.u)
+    .filter((img) => img !== undefined)
+    .map((img: string) => decode(img));
+
   let images = Object.values(child.data.media_metadata ?? {})
     .sort((a: any, b: any) => galleryIndexes[a.id] - galleryIndexes[b.id])
-    .map((data: any) => data.s?.u?.replace(/&amp;/g, "&"))
-    .filter((img) => img !== undefined);
+    .map((data: any) => data.s?.u)
+    .filter((img) => img !== undefined)
+    .map((img: string) => decode(img));
+
   if (images.length === 0 && child.data.post_hint === "image") {
     images = [child.data.url];
+  }
+
+  // default in case we can't get the aspect ratio
+  let imageAspectRatio = 0.75;
+  if (child.data.preview?.images[0]?.source) {
+    const { width, height } = child.data.preview.images[0].source;
+    imageAspectRatio = width / height;
+  } else if (child.data.gallery_data?.items?.[0]?.media_id) {
+    const firstMediaId = child.data.gallery_data.items[0].media_id;
+    const { x, y } = child.data.media_metadata[firstMediaId].s;
+    imageAspectRatio = x / y;
   }
 
   let video = child.data.media?.reddit_video?.fallback_url;
@@ -78,6 +103,7 @@ export async function formatPostData(child: any): Promise<Post> {
     redditAudioSource = video.replace(/DASH_\d+/, "DASH_AUDIO_128");
   }
 
+  let openGraphData = undefined;
   let externalLink = undefined;
   try {
     new RedditURL(child.data.url);
@@ -85,12 +111,16 @@ export async function formatPostData(child: any): Promise<Post> {
     externalLink = child.data.url;
     if (externalLink.includes("imgur.com") && externalLink.endsWith(".gifv")) {
       video = externalLink.replace(".gifv", ".mp4");
-    }
-    if (externalLink.includes("gfycat.com")) {
+    } else if (externalLink.includes("gfycat.com")) {
       video = `https://web.archive.org/web/0if_/thumbs.${externalLink.split("https://")[1]}-mobile.mp4`;
-    }
-    if (externalLink.includes("redgifs.com")) {
+    } else if (externalLink.includes("redgifs.com")) {
       video = await Redgifs.getMediaURL(externalLink);
+    } else if (externalLink) {
+      try {
+        openGraphData = await new URL(externalLink).getOpenGraphData();
+      } catch (_) {
+        // Might not have open graph data
+      }
     }
   }
 
@@ -100,6 +130,14 @@ export async function formatPostData(child: any): Promise<Post> {
     child.data.preview?.images[0]?.resolutions?.slice(-1)?.[0]?.url;
   if (video && videoThumbnail) {
     imageThumbnail = decode(videoThumbnail);
+  }
+  if (imageThumbnail === "spoiler") {
+    // if the thumbnail is a spoiler, reddit doesn't give it to us...
+    const imgPreviewThumbnail = decode(
+      child.data.preview?.images[0]?.resolutions?.[0]?.url,
+    );
+    // try to get the first image in the gallery, else the smallest preview image
+    imageThumbnail = galleryThumbnails[0] ?? imgPreviewThumbnail;
   }
 
   let poll = undefined;
@@ -133,16 +171,20 @@ export async function formatPostData(child: any): Promise<Post> {
       child.data.sr_detail?.icon_img,
     isModerator: child.data.distinguished === "moderator",
     isStickied: child.data.stickied,
+    isNSFW: child.data.over_18,
+    isSpoiler: child.data.spoiler,
     text: decode(child.data.selftext),
     html: decode(child.data.selftext_html),
     commentCount: child.data.num_comments,
     link: `https://www.reddit.com${child.data.permalink}`,
     images,
     imageThumbnail,
+    imageAspectRatio,
     video,
     redditAudioSource,
     poll,
     externalLink,
+    openGraphData,
     createdAt: child.data.created,
     timeSince: new Time(child.data.created * 1000).prettyTimeSince() + " ago",
     after: child.data.name,

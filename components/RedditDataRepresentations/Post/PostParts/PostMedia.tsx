@@ -1,5 +1,7 @@
-import React, { useContext } from "react";
-import { Text, StyleSheet, View } from "react-native";
+import { AntDesign } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import React, { useContext, useRef, useState } from "react";
+import { Text, StyleSheet, View, TouchableOpacity } from "react-native";
 
 import ImageViewer from "./PostMediaParts/ImageViewer";
 import Link from "./PostMediaParts/Link";
@@ -7,6 +9,7 @@ import PollViewer from "./PostMediaParts/PollViewer";
 import VideoPlayer from "./PostMediaParts/VideoPlayer";
 import { PostDetail } from "../../../../api/PostDetail";
 import { Post } from "../../../../api/Posts";
+import { PostSettingsContext } from "../../../../contexts/SettingsContexts/PostSettingsContext";
 import {
   ThemeContext,
   t,
@@ -25,6 +28,20 @@ export default function PostMedia({
   maxLines,
 }: PostMediaProps) {
   const { theme } = useContext(ThemeContext);
+  const { blurNSFW, blurSpoilers } = useContext(PostSettingsContext);
+
+  const isBlurable =
+    (blurNSFW && post.isNSFW) || (blurSpoilers && post.isSpoiler);
+
+  const [blur, setBlur] = useState(isBlurable);
+
+  const lastLoadedPost = useRef(post.id);
+  if (lastLoadedPost.current !== post.id) {
+    // Component was recycled by FlashList. Need to reset state.
+    // https://shopify.github.io/flash-list/docs/recycling
+    lastLoadedPost.current = post.id;
+    setBlur(isBlurable);
+  }
 
   return (
     <>
@@ -42,7 +59,7 @@ export default function PostMedia({
           <ImageViewer
             images={post.images}
             thumbnail={post.imageThumbnail}
-            resizeDynamically
+            aspectRatio={post.imageAspectRatio}
           />
         </View>
       )}
@@ -69,7 +86,28 @@ export default function PostMedia({
           <PollViewer poll={post.poll} />
         </View>
       )}
-      {post.externalLink && <Link link={post.externalLink} />}
+      {post.externalLink && <Link post={post} />}
+      {isBlurable && blur && (
+        <TouchableOpacity
+          style={styles.blurContainer}
+          onPress={() => setBlur(false)}
+          activeOpacity={1}
+        >
+          <BlurView intensity={80} style={styles.blur} />
+          <View style={styles.blurIconContainer}>
+            <View
+              style={t(styles.blurIconBox, {
+                backgroundColor: theme.background,
+              })}
+            >
+              <AntDesign name="eye" size={22} color={theme.subtleText} />
+              <Text style={{ color: theme.subtleText }}>
+                {post.isNSFW ? "NSFW" : post.isSpoiler ? "Spoiler" : ""}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
     </>
   );
 }
@@ -105,5 +143,31 @@ const styles = StyleSheet.create({
   pollContainer: {
     marginVertical: 10,
     marginHorizontal: 10,
+  },
+  blurContainer: {
+    position: "absolute",
+    top: 0,
+    width: "100%",
+    height: "100%",
+  },
+  blur: {
+    width: "100%",
+    height: "100%",
+  },
+  blurIconContainer: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blurIconBox: {
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "pink",
+    alignItems: "center",
   },
 });

@@ -26,7 +26,10 @@ module.exports = {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: IS_DEV ? 'com.zacharylm.hydra-dev' : "com.zacharylm.hydra"
+      bundleIdentifier: IS_DEV ? 'com.zacharylm.hydra-dev' : "com.zacharylm.hydra",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       adaptiveIcon: {
@@ -50,10 +53,17 @@ module.exports = {
         'expo-media-library', {
           savePhotosPermission: 'Allow $(PRODUCT_NAME) to save photos and videos to your library.',
         }
+      ],
+      "@sentry/react-native/expo",
+      [
+        'expo-image-picker', {
+          "photosPermission": "$(PRODUCT_NAME) accesses your photos to upload images.",
+        }
       ]
     ],
     updates: {
-      url: `https://u.expo.dev/${projectId}`
+      url: `https://u.expo.dev/${projectId}`,
+      fallbackToCacheTimeout: 5000,
     }
   }
 }
